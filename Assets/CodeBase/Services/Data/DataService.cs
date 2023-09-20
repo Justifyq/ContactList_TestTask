@@ -15,7 +15,6 @@ namespace Services.Data
         private const string EmployeeStoragePath = "EmployeeStorage";
 
         public event Action FavoriteEmployeesUpdated;
-        public bool Initialized { get; private set; }
         public IEnumerable<Employee> AllEmployees => _employees.Keys;
         public IEnumerable<Employee> FavoriteEmployees => _favoriteEmployees;
 
@@ -36,20 +35,13 @@ namespace Services.Data
 
         public void Initialize(Action initialized)
         {
-            if (_isInInitializeProcess || Initialized) 
-                return;
-
-            _isInInitializeProcess = true;
-        
             _dataLoader.LoadData(AvatarStoragePath, EmployeeStoragePath, employees =>
             {
                 _employees = employees;
-                Initialized = true;
 
                 var favorite = _employees.Keys.Where(e => e.Favorite);
                 _favoriteEmployees.AddRange(favorite);
-            
-
+                
                 initialized?.Invoke();
             });
         }

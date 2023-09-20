@@ -8,6 +8,7 @@ namespace Services.Network
 {
     public class HttpSpriteLoader : ISpriteLoaderService
     {
+        private const string Uri = "https://loremflickr.com/320/240";
         private readonly ICoroutineRunner _coroutineRunner;
         private Coroutine _coroutine;
 
@@ -26,7 +27,7 @@ namespace Services.Network
 
             for (int i = 0; i < sprites.Length; i++)
             {
-                var request = UnityWebRequestTexture.GetTexture("https://loremflickr.com/320/240");
+                var request = UnityWebRequestTexture.GetTexture(Uri);
                 yield return request.SendWebRequest();
 
                 if (request.result != UnityWebRequest.Result.Success)

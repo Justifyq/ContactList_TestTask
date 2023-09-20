@@ -7,7 +7,6 @@ namespace Services.Data
     public interface IDataService
     {
         event Action FavoriteEmployeesUpdated;
-        bool Initialized { get; }
         IEnumerable<Employee> AllEmployees { get; }
         IEnumerable<Employee> FavoriteEmployees { get; }
 

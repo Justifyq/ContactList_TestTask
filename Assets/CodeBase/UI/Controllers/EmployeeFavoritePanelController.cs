@@ -15,8 +15,7 @@ namespace UI.Controllers
         
         private EmployeeCardFactory _employeeCardFactory;
         private IDataService _dataService;
-
-
+        
         private void OnDestroy()
         {
             if (_dataService != null)
