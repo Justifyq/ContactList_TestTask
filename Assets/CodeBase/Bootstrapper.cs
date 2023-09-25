@@ -1,36 +1,34 @@
-﻿using Factories.Views;
+﻿using System.Linq;
+using Factories.Views;
 using Services.Data;
 using Services.Network;
-using Services.Serialization;
 using UI.Controllers;
 using UnityEngine;
 using Utils;
 
 public class Bootstrapper : MonoBehaviour, ICoroutineRunner
-{ 
-    [SerializeField] private Transform employeesContainer;
+{
     [SerializeField] private EmployeeCardController prefab;
     [SerializeField] private ProfileController profileController;
     [SerializeField] private EmployeeFavoritePanelController employeeFavorite;
+    [SerializeField] private EmployeeCardsPoolController cardsPoolController;
     
     private IDataService _dataService;
     
     private void Awake()
     {
-        ISerializationService serializationService = new JsonSerializationService();
         ISpriteLoaderService spriteLoaderService = new HttpSpriteLoader(this);
-
-        IDataLoader dataLoader = new DataLoader(serializationService, spriteLoaderService);
-        _dataService = new DataService(dataLoader, serializationService);
+        IContactsLoader contactsLoader = new HttpContactLoader(this);
         
-        _dataService.Initialize(Initialized);
+        IDataLoader dataLoader = new DataLoader(spriteLoaderService, contactsLoader);
+        _dataService = new DataService(dataLoader);
+        
+        _dataService.Initialize(() =>
+        {
+            var employeeCardFactory = new EmployeeCardFactory(prefab, profileController, _dataService);
+            cardsPoolController.Construct(_dataService.AllEmployees.ToArray(),employeeCardFactory);
+            employeeFavorite.Construct(_dataService, employeeCardFactory);
+        });
 
-    }
-    
-    private void Initialized()
-    {
-        var employeeCardFactory = new EmployeeCardFactory(prefab, profileController, _dataService);
-        employeeCardFactory.CreateCards(employeesContainer, _dataService.AllEmployees);
-        employeeFavorite.Construct(_dataService, employeeCardFactory);
     }
 }

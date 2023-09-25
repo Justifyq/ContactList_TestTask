@@ -1,4 +1,5 @@
 ﻿using System;
+using UnityEngine.Serialization;
 
 namespace Model.DTO
 {
@@ -7,6 +8,5 @@ namespace Model.DTO
     {
         public int EmployeeId;
         public int AvatarId;
-        public bool Favorite;
     }
 }

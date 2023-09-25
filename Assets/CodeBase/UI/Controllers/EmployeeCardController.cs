@@ -1,4 +1,5 @@
-﻿using Model;
+﻿using System;
+using Model;
 using Services.Data;
 using UI.View;
 using UnityEngine;
@@ -23,10 +24,13 @@ namespace UI.Controllers
         {
             employeeCardView.FavoriteChanged -= EmployeeCardView_OnFavoriteChanged;
             employeeCardView.DisplayButtonClicked -= EmployeeCardView_OnDisplayButtonClicked;
-        
+
             if (_employee != null)
-                _employee.FavoriteChanged += Employee_OnFavoriteChanged;
-        
+            {
+                _employee.FavoriteChanged -= Employee_OnFavoriteChanged;
+                _employee.AvatarUpdated -= Employee_OnAvatarUpdated;
+            }
+
             employeeCardView.Dispose();
         }
     
@@ -35,9 +39,14 @@ namespace UI.Controllers
             _employee = employee;
             _dataService = dataService;
             _profileController = profileController;
+            
             employeeCardView.Construct(employee);
+            
+            _employee.AvatarUpdated += Employee_OnAvatarUpdated;
             _employee.FavoriteChanged += Employee_OnFavoriteChanged;
         }
+
+        private void Employee_OnAvatarUpdated() => employeeCardView.SetAvatar(_employee.Avatar);
 
         private void EmployeeCardView_OnFavoriteChanged(bool isFavorite) => _dataService.SetEmployeeFavorite(_employee, isFavorite);
 

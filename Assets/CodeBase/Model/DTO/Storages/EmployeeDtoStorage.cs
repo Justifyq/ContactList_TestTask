@@ -5,7 +5,7 @@ namespace Model.DTO.Storages
 {
     [Serializable]
     public class EmployeeDtoStorage
-    {
-        [FormerlySerializedAs("data")] public EmployeeDTO[] Data;
+    { 
+        public EmployeeDTO[] Data;
     }
 }

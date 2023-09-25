@@ -1,12 +1,12 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Factories.Data;
-using Factories.Data.DTO;
 using Model;
 using Model.DTO;
 using Model.DTO.Storages;
 using Services.Network;
-using Services.Serialization;
 using UnityEngine;
 using Avatar = Model.Avatar;
 
@@ -15,104 +15,107 @@ namespace Services.Data
     public class DataLoader : IDataLoader
     {
         private const int SpriteCount = 5;
-    
         private const string DefaultIcoPath = "progile-avatar-bg";
-        private const string EmployeeInfoStoragePath = "test_task_mock_data";
 
-        private readonly ISerializationService _serializationService;
-        private readonly ISpriteLoaderService _spriteLoaderService;
-        private readonly AvatarDtoFactory _avatarDtoFactory;
         private readonly AvatarFactory _avatarFactory;
-        private readonly EmployeeDtoFactory _employeeDtoFactory;
-        private readonly EmployeesFactory _employeesFactory;
-        private readonly EmployeeInfoDTO[] _employeeInfoDtos;
+        private readonly EmployeeFactory _employeeFactory;
+        private readonly IContactsLoader _contactsLoader;
         
-        public DataLoader(ISerializationService serializationService, ISpriteLoaderService spriteLoaderService)
-        {
-            _serializationService = serializationService;
-            _spriteLoaderService = spriteLoaderService;
-        
-            _avatarDtoFactory = new AvatarDtoFactory();
-            _avatarFactory = new AvatarFactory();
-        
-            _employeeDtoFactory = new EmployeeDtoFactory();
-            _employeesFactory = new EmployeesFactory();
+        private EmployeeInfoDTO[] _employeeInfoDtos;
+        private AvatarDtoStorage _avatarsStorage;
+        private Avatar[] _avatars;
 
-            string json = Resources.Load<TextAsset>(EmployeeInfoStoragePath).text;
-            _employeeInfoDtos =  _serializationService.Deserialize<EmployeesInfoStorage>(json).data;
+        public DataLoader(ISpriteLoaderService spriteLoaderService, IContactsLoader contactsLoader)
+        {
+            _avatarFactory = new AvatarFactory(Resources.Load<Sprite>(DefaultIcoPath), spriteLoaderService);
+            _contactsLoader = contactsLoader;
+            _employeeFactory = new EmployeeFactory();
         }
 
-        public void LoadData(string avatarStoragePath, string employeeStoragePath, Action<Dictionary<Employee, EmployeeDTO>> loaded) => 
-            LoadAvatars(avatarStoragePath, av => loaded?.Invoke(LoadEmployees(employeeStoragePath, av)));
 
-        private void LoadAvatars(string avatarStoragePath, Action<Avatar[]> loaded)
+        public void LoadData(string avatarStoragePath, string employeeStoragePath,
+            FavoriteEmployeesStorage favoriteEmployeesStorage, Action<Dictionary<Employee, EmployeeDTO>> loaded)
         {
-            if (PlayerPrefs.HasKey(avatarStoragePath))
-                LoadExistedAvatarDtos(avatarStoragePath, CreateAvatars);
-            else
-                DownloadAvatars(avatarStoragePath, CreateAvatars);
-
-
-            void CreateAvatars(AvatarDto[] dtos)
+            _contactsLoader.Load(storage =>
             {
-                Avatar[] avatars = _avatarFactory.CreateAvatars(dtos);
-                loaded?.Invoke(avatars);
-            }
+                _employeeInfoDtos = storage.data;
+                loaded?.Invoke(LoadData(avatarStoragePath, employeeStoragePath, favoriteEmployeesStorage));
+            });
         }
 
-        private Dictionary<Employee, EmployeeDTO> LoadEmployees(string storagePath, Avatar[] avatars)
+        public Dictionary<Employee, EmployeeDTO> LoadData(string avatarStoragePath, string employeeStoragePath, FavoriteEmployeesStorage favoriteEmployeesStorage = null)
         {
-            EmployeeDTO[] employeeDtos = PlayerPrefs.HasKey(storagePath) ?
-                _serializationService.Deserialize<EmployeeDtoStorage>(PlayerPrefs.GetString(storagePath)).Data
-                : _employeeDtoFactory.CreateEmployeeDtos(_employeeInfoDtos, avatars);
+            _avatars = LoadAvatars(avatarStoragePath);
+            return LoadEmployees(employeeStoragePath, _avatars, favoriteEmployeesStorage);
+        }
 
-            var employees = new Dictionary<Employee, EmployeeDTO>();
-        
-            foreach (EmployeeDTO dto in employeeDtos)
+        private Avatar[] LoadAvatars(string avatarStoragePath)
+        {
+            if (!PlayerPrefs.HasKey(avatarStoragePath))
+                return _avatarFactory.CreateAvatars(SpriteCount, avatarDtos => AvatarDtoCreated(avatarStoragePath, avatarDtos));
+
+            AvatarDtoStorage storage = JsonUtility.FromJson<AvatarDtoStorage>(PlayerPrefs.GetString(avatarStoragePath));
+            return _avatarFactory.CreateAvatars(storage);
+        }
+
+        private Dictionary<Employee, EmployeeDTO> LoadEmployees(string storagePath, Avatar[] avatars, FavoriteEmployeesStorage favoriteEmployeesStorage = null)
+        {
+            if (!PlayerPrefs.HasKey(storagePath))
             {
-                Employee employee = _employeesFactory.CreateEmployee(dto, _employeeInfoDtos, avatars);
-                employees.Add(employee, dto);
+                Dictionary<Employee, EmployeeDTO> createdEmployees = _employeeFactory.CreateEmployees(_employeeInfoDtos, avatars, favoriteEmployeesStorage);
+                EmployeesDtoCreated(storagePath,createdEmployees.Values.ToArray());
+                return createdEmployees;
             }
+
+            EmployeeDTO[] employeeDtos = JsonUtility.FromJson<EmployeeDtoStorage>(PlayerPrefs.GetString(storagePath)).Data;
+                
+            Dictionary<Employee, EmployeeDTO> employees = _employeeInfoDtos.Length == employeeDtos.Length 
+                ? _employeeFactory.CreateEmployees(employeeDtos, _employeeInfoDtos, avatars, favoriteEmployeesStorage) 
+                : AppendNewEmployees(avatars, favoriteEmployeesStorage, employeeDtos);
 
             return employees;
         }
-    
-        private void LoadExistedAvatarDtos(string avatarStoragePath, Action<AvatarDto[]> callback)
+
+        private Dictionary<Employee, EmployeeDTO> AppendNewEmployees(Avatar[] avatars, FavoriteEmployeesStorage favoriteEmployeesStorage,
+            EmployeeDTO[] employeeDtos)
         {
-            AvatarDto[] avatarDtos = _serializationService.Deserialize<AvatarDtoStorage>(PlayerPrefs.GetString(avatarStoragePath)).Data;
-            callback?.Invoke(avatarDtos);
+            int lastEmployeeId = employeeDtos.Max(e => e.EmployeeId);
+
+            EmployeeInfoDTO[] toAdd = _employeeInfoDtos.Where(e => e.id > lastEmployeeId).ToArray();
+            Dictionary<Employee, EmployeeDTO> employees = _employeeFactory.CreateEmployees(employeeDtos, _employeeInfoDtos, avatars, favoriteEmployeesStorage);
+            Dictionary<Employee, EmployeeDTO> newEmployees = _employeeFactory.CreateEmployees(toAdd, avatars, favoriteEmployeesStorage);
+
+            foreach ((Employee employee, EmployeeDTO employeeDto) in newEmployees)
+                employees.Add(employee, employeeDto);
+            
+            return employees;
         }
-    
-        private void DownloadAvatars(string storagePath, Action<AvatarDto[]> callback)
+        
+        private void AvatarDtoCreated(string avatarStoragePath, AvatarDto[] dtos)
         {
-            _spriteLoaderService.LoadSprites(SpriteCount, sprites =>
+            var storage = new AvatarDtoStorage()
             {
-                bool loadSuccess = true;
-                if (sprites == null || sprites.Length < SpriteCount)
-                {
-                    sprites = new Sprite[SpriteCount];
-                    Sprite defaultSprite = Resources.Load<Sprite>(DefaultIcoPath);
-                
-                    for (var i = 0; i < sprites.Length; i++) 
-                        sprites[i] = defaultSprite;
+                Data = dtos,
+            };
 
-                    loadSuccess = false;
-                }
+            SaveToPrefs(avatarStoragePath, storage);
+        }
 
-                AvatarDto[] avatarDtos = _avatarDtoFactory.CreateAvatarDtos(sprites);
+        private void EmployeesDtoCreated(string storagePath, EmployeeDTO[] dtos)
+        {
+            var storage = new EmployeeDtoStorage()
+            {
+                Data = dtos,
+            };
 
-                if (loadSuccess)
-                {
-                    var storage = new AvatarDtoStorage
-                    {
-                        Data = avatarDtos
-                    };
-                
-                    PlayerPrefs.SetString(storagePath, _serializationService.Serialize(storage));
-                    PlayerPrefs.Save();
-                }
-                callback?.Invoke(avatarDtos);
-            });
+            SaveToPrefs(storagePath, storage);
+        }
+
+        private void SaveToPrefs<T>(string storagePath, T toSave) where T : class
+        {
+            string json = JsonUtility.ToJson(toSave);
+            PlayerPrefs.SetString(storagePath, json);
+            PlayerPrefs.Save();
         }
     }
 }

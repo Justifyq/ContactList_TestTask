@@ -1,5 +1,6 @@
 ﻿using System;
 using Model;
+using Model.DTO;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -39,7 +40,9 @@ namespace UI.View
             Favorite = employee.Favorite;
             avatar.sprite = employee.Avatar;
         }
-    
+        
+        public void SetAvatar(Sprite sprite) => avatar.sprite = sprite;
+
         public void Dispose()
         {
             displayProfileButton.onClick.RemoveListener(Button_OnClick);

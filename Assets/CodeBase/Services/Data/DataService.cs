@@ -4,7 +4,6 @@ using System.Linq;
 using Model;
 using Model.DTO;
 using Model.DTO.Storages;
-using Services.Serialization;
 using UnityEngine;
 
 namespace Services.Data
@@ -13,52 +12,57 @@ namespace Services.Data
     {
         private const string AvatarStoragePath = "AvatarStorage";
         private const string EmployeeStoragePath = "EmployeeStorage";
+        private const string FavoriteStoragePath = "FavoriteStorage";
 
         public event Action FavoriteEmployeesUpdated;
         public IEnumerable<Employee> AllEmployees => _employees.Keys;
         public IEnumerable<Employee> FavoriteEmployees => _favoriteEmployees;
 
         private readonly IDataLoader _dataLoader;
-        private readonly ISerializationService _serializationService;
         private readonly List<Employee> _favoriteEmployees;
-    
-        private bool _isInInitializeProcess;
+        
         private Dictionary<Employee, EmployeeDTO> _employees;
     
-        public DataService(IDataLoader loader, ISerializationService serializationService)
+        public DataService(IDataLoader loader)
         {
             _dataLoader = loader;
-            _serializationService = serializationService;
             _employees = new Dictionary<Employee, EmployeeDTO>();
             _favoriteEmployees = new List<Employee>();
         }
 
         public void Initialize(Action initialized)
         {
-            _dataLoader.LoadData(AvatarStoragePath, EmployeeStoragePath, employees =>
-            {
-                _employees = employees;
+            FavoriteEmployeesStorage favoriteStorage = null;
+            
+            if (PlayerPrefs.HasKey(FavoriteStoragePath))
+                favoriteStorage = JsonUtility.FromJson<FavoriteEmployeesStorage>(PlayerPrefs.GetString(FavoriteStoragePath));
 
-                var favorite = _employees.Keys.Where(e => e.Favorite);
-                _favoriteEmployees.AddRange(favorite);
-                
-                initialized?.Invoke();
-            });
+            _dataLoader.LoadData(AvatarStoragePath, EmployeeStoragePath, favoriteStorage, employees =>
+             {
+                 _employees = employees;
+                 
+                 if (employees == null)
+                     return;
+                 
+                 if (favoriteStorage != null)
+                     _favoriteEmployees.AddRange(_employees.Where(e => e.Key.Favorite).Select(e => e.Key));
+
+                 initialized?.Invoke();
+             });
         }
 
         public void SetEmployeeFavorite(Employee employee, bool favorite)
         {
             if (employee.Favorite == favorite)
                 return;
-        
-            _employees[employee].Favorite = favorite;
-            employee.Favorite = favorite;
-        
+
             if (!favorite)
                 _favoriteEmployees.Remove(employee);
 
             if (favorite)
                 _favoriteEmployees.Add(employee);
+
+            employee.Favorite = favorite;
         
             FavoriteEmployeesUpdated?.Invoke();
         
@@ -67,12 +71,12 @@ namespace Services.Data
     
         public void Save()
         {
-            var storage = new EmployeeDtoStorage
+            var favorite = new FavoriteEmployeesStorage
             {
-                Data = _employees.Select(kv => kv.Value).ToArray()
+                Employees = _favoriteEmployees.Select(e => e.Id).ToArray(),
             };
 
-            PlayerPrefs.SetString(EmployeeStoragePath, _serializationService.Serialize(storage));
+            PlayerPrefs.SetString(FavoriteStoragePath, JsonUtility.ToJson(favorite));
             PlayerPrefs.Save();
         }
     }
